@@ -21,9 +21,10 @@ class DomainDispatcherApplication(object):
     value. We'll match the host header value with the url_bases of each backend.
     """
 
-    def __init__(self, create_app, service=None):
+    def __init__(self, create_app, service=None, cors=False):
         self.create_app = create_app
         self.lock = Lock()
+        self.cors = cors
         self.app_instances = {}
         self.service = service
 
@@ -44,8 +45,10 @@ class DomainDispatcherApplication(object):
             backend = self.get_backend_for_host(host)
             app = self.app_instances.get(backend, None)
             if app is None:
-                app = self.create_app(backend)
+                app = self.create_app(backend,self.cors)
                 self.app_instances[backend] = app
+
+
             return app
 
     def __call__(self, environ, start_response):
@@ -60,11 +63,24 @@ class RegexConverter(BaseConverter):
         self.regex = items[0]
 
 
-def create_backend_app(service):
+def create_backend_app(service, cors=False):
     from werkzeug.routing import Map
 
     # Create the backend_app
     backend_app = Flask(__name__)
+
+    # If we set the CORS flag, wrap the app to accept all
+    if cors:
+        @backend_app.after_request
+        def allow_cors(response):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "X-CSRF-Token"
+            response.headers["Access-Control-Max-Age"] = "3"
+            response.headers["Access-Control-Allow-Methods"] = "OPTIONS, HEAD, GET, POST, PUT, DELETE"
+            response.headers["X-CSRF-Token"] = "5A44B387B75E54417F6C64FF3D485141"
+            print(response.headers)
+            return response
+
     backend_app.debug = True
 
     # Reset view functions to reset the app
@@ -104,12 +120,24 @@ def main(argv=sys.argv[1:]):
         '-p', '--port', type=int,
         help='Port number to use for connection',
         default=5000)
+    parser.add_argument(
+        '-c', '--cors',
+        help="Add to set all endpoint's CORS header to accept '*'",
+        action='store_true',
+        default=False,
+        )
+
 
     args = parser.parse_args(argv)
 
     # Wrap the main application
-    main_app = DomainDispatcherApplication(create_backend_app, service=args.service)
+    main_app = DomainDispatcherApplication(
+            create_backend_app,
+            service=args.service,
+            cors=args.cors)
     main_app.debug = True
+
+
 
     run_simple(args.host, args.port, main_app, threaded=True)
 

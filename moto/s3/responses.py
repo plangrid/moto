@@ -22,6 +22,7 @@ def parse_key_name(pth):
 
 
 class ResponseObject(_TemplateEnvironmentMixin):
+
     def __init__(self, backend, bucket_name_from_url, parse_key_name):
         self.backend = backend
         self.bucket_name_from_url = bucket_name_from_url
@@ -70,7 +71,8 @@ class ResponseObject(_TemplateEnvironmentMixin):
         elif method == 'POST':
             return self._bucket_response_post(request, bucket_name, headers)
         else:
-            raise NotImplementedError("Method {0} has not been impelemented in the S3 backend yet".format(method))
+            raise NotImplementedError(
+                "Method {0} has not been impelemented in the S3 backend yet".format(method))
 
     def _bucket_response_head(self, bucket_name, headers):
         self.backend.get_bucket(bucket_name)
@@ -80,11 +82,14 @@ class ResponseObject(_TemplateEnvironmentMixin):
         if 'uploads' in querystring:
             for unsup in ('delimiter', 'max-uploads'):
                 if unsup in querystring:
-                    raise NotImplementedError("Listing multipart uploads with {} has not been implemented yet.".format(unsup))
-            multiparts = list(self.backend.get_all_multiparts(bucket_name).values())
+                    raise NotImplementedError(
+                        "Listing multipart uploads with {} has not been implemented yet.".format(unsup))
+            multiparts = list(
+                self.backend.get_all_multiparts(bucket_name).values())
             if 'prefix' in querystring:
                 prefix = querystring.get('prefix', [None])[0]
-                multiparts = [upload for upload in multiparts if upload.key_name.startswith(prefix)]
+                multiparts = [
+                    upload for upload in multiparts if upload.key_name.startswith(prefix)]
             template = self.response_template(S3_ALL_MULTIPARTS)
             return 200, headers, template.render(
                 bucket_name=bucket_name,
@@ -97,7 +102,8 @@ class ResponseObject(_TemplateEnvironmentMixin):
             bucket = self.backend.get_bucket(bucket_name)
             if not bucket.rules:
                 return 404, headers, "NoSuchLifecycleConfiguration"
-            template = self.response_template(S3_BUCKET_LIFECYCLE_CONFIGURATION)
+            template = self.response_template(
+                S3_BUCKET_LIFECYCLE_CONFIGURATION)
             return 200, headers, template.render(rules=bucket.rules)
         elif 'versioning' in querystring:
             versioning = self.backend.get_bucket_versioning(bucket_name)
@@ -133,7 +139,8 @@ class ResponseObject(_TemplateEnvironmentMixin):
         bucket = self.backend.get_bucket(bucket_name)
         prefix = querystring.get('prefix', [None])[0]
         delimiter = querystring.get('delimiter', [None])[0]
-        result_keys, result_folders = self.backend.prefix_query(bucket, prefix, delimiter)
+        result_keys, result_folders = self.backend.prefix_query(
+            bucket, prefix, delimiter)
         template = self.response_template(S3_BUCKET_GET_RESPONSE)
         return 200, headers, template.render(
             bucket=bucket,
@@ -169,7 +176,8 @@ class ResponseObject(_TemplateEnvironmentMixin):
             return ""
         else:
             try:
-                new_bucket = self.backend.create_bucket(bucket_name, region_name)
+                new_bucket = self.backend.create_bucket(
+                    bucket_name, region_name)
             except BucketAlreadyExists:
                 if region_name == DEFAULT_REGION_NAME:
                     # us-east-1 has different behavior
@@ -193,7 +201,8 @@ class ResponseObject(_TemplateEnvironmentMixin):
             return 204, headers, template.render(bucket=removed_bucket)
         else:
             # Tried to delete a bucket that still has keys
-            template = self.response_template(S3_DELETE_BUCKET_WITH_ITEMS_ERROR)
+            template = self.response_template(
+                S3_DELETE_BUCKET_WITH_ITEMS_ERROR)
             return 409, headers, template.render(bucket=removed_bucket)
 
     def _bucket_response_post(self, request, bucket_name, headers):
@@ -212,6 +221,8 @@ class ResponseObject(_TemplateEnvironmentMixin):
                 form[k] = v
 
         key = form['key']
+        key = key.replace(
+            '${filename}', request.files['file'].filename)
         if 'file' in form:
             f = form['file']
         else:
@@ -223,12 +234,20 @@ class ResponseObject(_TemplateEnvironmentMixin):
         metadata = metadata_from_headers(form)
         new_key.set_metadata(metadata)
 
-        return 200, headers, ""
+        template = self.response_template(S3_POST_BUCKET_RESPONSE)
+        response = template.render(
+            bucket_name=bucket_name,
+            key_name=key,
+            etag=new_key.etag
+        )
+
+        return 201, headers, response
 
     def _bucket_response_delete_keys(self, request, bucket_name, headers):
         template = self.response_template(S3_DELETE_KEYS_RESPONSE)
 
-        keys = minidom.parseString(request.body.decode('utf-8')).getElementsByTagName('Key')
+        keys = minidom.parseString(request.body.decode(
+            'utf-8')).getElementsByTagName('Key')
         deleted_names = []
         error_names = []
 
@@ -306,7 +325,8 @@ class ResponseObject(_TemplateEnvironmentMixin):
         elif method == 'POST':
             return self._key_response_post(request, body, parsed_url, bucket_name, query, key_name, headers)
         else:
-            raise NotImplementedError("Method {0} has not been impelemented in the S3 backend yet".format(method))
+            raise NotImplementedError(
+                "Method {0} has not been impelemented in the S3 backend yet".format(method))
 
     def _key_response_get(self, bucket_name, query, key_name, headers):
         if 'uploadId' in query:
@@ -356,7 +376,8 @@ class ResponseObject(_TemplateEnvironmentMixin):
 
         if 'x-amz-copy-source' in request.headers:
             # Copy key
-            src_bucket, src_key = request.headers.get("x-amz-copy-source").split("/", 1)
+            src_bucket, src_key = request.headers.get(
+                "x-amz-copy-source").split("/", 1)
             self.backend.copy_key(src_bucket, src_key, bucket_name, key_name,
                                   storage=storage_class)
             mdirective = request.headers.get('x-amz-metadata-directive')
@@ -408,7 +429,8 @@ class ResponseObject(_TemplateEnvironmentMixin):
         ps = minidom.parseString(body).getElementsByTagName('Part')
         prev = 0
         for p in ps:
-            pn = int(p.getElementsByTagName('PartNumber')[0].firstChild.wholeText)
+            pn = int(p.getElementsByTagName(
+                'PartNumber')[0].firstChild.wholeText)
             if pn <= prev:
                 raise InvalidPartOrder()
             yield (pn, p.getElementsByTagName('ETag')[0].firstChild.wholeText)
@@ -416,7 +438,8 @@ class ResponseObject(_TemplateEnvironmentMixin):
     def _key_response_post(self, request, body, parsed_url, bucket_name, query, key_name, headers):
         if body == b'' and parsed_url.query == 'uploads':
             metadata = metadata_from_headers(request.headers)
-            multipart = self.backend.initiate_multipart(bucket_name, key_name, metadata)
+            multipart = self.backend.initiate_multipart(
+                bucket_name, key_name, metadata)
 
             template = self.response_template(S3_MULTIPART_INITIATE_RESPONSE)
             response = template.render(
@@ -446,9 +469,11 @@ class ResponseObject(_TemplateEnvironmentMixin):
             key.restore(int(days))
             return r, headers, ""
         else:
-            raise NotImplementedError("Method POST had only been implemented for multipart uploads and restore operations, so far")
+            raise NotImplementedError(
+                "Method POST had only been implemented for multipart uploads and restore operations, so far")
 
-S3ResponseInstance = ResponseObject(s3_backend, bucket_name_from_url, parse_key_name)
+S3ResponseInstance = ResponseObject(
+    s3_backend, bucket_name_from_url, parse_key_name)
 
 S3_ALL_BUCKETS = """<ListAllMyBucketsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01">
   <Owner>
@@ -676,6 +701,15 @@ S3_MULTIPART_COMPLETE_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
   <Key>{{ key_name }}</Key>
   <ETag>{{ etag }}</ETag>
 </CompleteMultipartUploadResult>
+"""
+
+S3_POST_BUCKET_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
+<PostResponse>
+  <Location>http://{{ bucket_name }}.s3.amazonaws.com/{{ key_name }}</Location>
+  <Bucket>{{ bucket_name }}</Bucket>
+  <Key>{{ key_name }}</Key>
+  <ETag>{{ etag }}</ETag>
+</PostResponse>
 """
 
 S3_ALL_MULTIPARTS = """<?xml version="1.0" encoding="UTF-8"?>
